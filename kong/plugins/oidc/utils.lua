@@ -51,6 +51,7 @@ function M.get_options(config, ngx)
     realm = config.realm,
     redirect_uri_path = config.redirect_uri_path or M.get_redirect_uri_path(ngx),
     scope = config.scope,
+    anonymous = config.anonymous,
     response_type = config.response_type,
     ssl_verify = config.ssl_verify,
     token_endpoint_auth_method = config.token_endpoint_auth_method,
@@ -84,6 +85,23 @@ function M.injectUser(user)
   local userinfo = cjson.encode(user)
   ngx.req.set_header("X-Userinfo", ngx.encode_base64(userinfo))
   ngx.req.set_header("X-Credential-Identifier", user.username)
+end
+
+function M.injectAnonymousUser(anonymousUserId)
+  local consumer_cache_key, consumer, err
+  local cache = kong.cache
+  consumer_cache_key = kong.db.consumers:cache_key(anonymousUserId)
+  consumer, err      = cache:get(consumer_cache_key, nil,
+                                 kong.client.load_consumer,
+                                 anonymousUserId)
+  if err then
+    kong.log.err(err)
+    return false
+  end
+
+  ngx.req.set_header("X-Anonymous-Consumer", "true")
+  ngx.req.set_header("X-Consumer-Username", consumer.username)
+  ngx.req.set_header("X-Consumer-Id", consumer.id)
 end
 
 function M.has_bearer_access_token()
